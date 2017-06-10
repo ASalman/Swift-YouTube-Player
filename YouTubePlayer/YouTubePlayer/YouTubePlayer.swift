@@ -7,6 +7,7 @@
 //
 
 import UIKit
+import WebKit
 
 public enum YouTubePlayerState: String {
     case Unstarted = "-1"
@@ -80,11 +81,11 @@ public func videoIDFromYouTubeURL(_ videoURL: URL) -> String? {
 }
 
 /** Embed and control YouTube videos */
-open class YouTubePlayerView: UIView, UIWebViewDelegate {
+open class YouTubePlayerView: UIView {
     
     public typealias YouTubePlayerParameters = [String: AnyObject]
     
-    fileprivate var webView: UIWebView!
+    fileprivate var webView: WKWebView!
     
     /** The readiness of the player */
     fileprivate(set) open var ready = false
@@ -127,12 +128,17 @@ open class YouTubePlayerView: UIView, UIWebViewDelegate {
     // MARK: Web view initialization
     
     fileprivate func buildWebView(_ parameters: [String: AnyObject]) {
-        webView = UIWebView()
+        let webviewConfiguration                       = WKWebViewConfiguration()
+        webviewConfiguration.allowsInlineMediaPlayback = true
+        webviewConfiguration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        if #available(iOS 9.0, *) {
+            webviewConfiguration.requiresUserActionForMediaPlayback  = false
+        }
+        
+        webView = WKWebView(frame: CGRect.zero, configuration: webviewConfiguration)
         webView.isOpaque = false
         webView.backgroundColor = UIColor.clear
-        webView.allowsInlineMediaPlayback = true
-        webView.mediaPlaybackRequiresUserAction = false
-        webView.delegate = self
+        webView.navigationDelegate = self
         webView.scrollView.isScrollEnabled = false
     }
     
@@ -211,7 +217,13 @@ open class YouTubePlayerView: UIView, UIWebViewDelegate {
     
     fileprivate func evaluatePlayerCommand(_ command: String) -> String? {
         let fullCommand = "player." + command + ";"
-        return webView.stringByEvaluatingJavaScript(from: fullCommand)
+        var value = ""
+        webView.evaluateJavaScript(fullCommand) { (result, error) -> Void in
+            if error == nil {
+                value = result as? String ?? ""
+            }
+        }
+        return value
     }
     
     
@@ -334,19 +346,46 @@ open class YouTubePlayerView: UIView, UIWebViewDelegate {
             }
         }
     }
+}
+
+extension YouTubePlayerView: WKNavigationDelegate {
     
-    
-    // MARK: UIWebViewDelegate
-    
-    open func webView(_ webView: UIWebView, shouldStartLoadWith request: URLRequest, navigationType: UIWebViewNavigationType) -> Bool {
+    public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        print("Navigation Action: \(navigationAction.request.url!.absoluteString)")
         
-        let url = request.url
+        let url = navigationAction.request.url
         
         // Check if ytplayer event and, if so, pass to handleJSEvent
-        if let url = url, url.scheme == "ytplayer" { handleJSEvent(url) }
+        if let url = url, url.scheme == "ytplayer" {
+            handleJSEvent(url)
+            decisionHandler(.cancel)
+            return
+        }
         
-        return true
+        decisionHandler(.allow)
     }
+    
+    public func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        print("Navigation Response: \(navigationResponse.response.mimeType!)")
+        decisionHandler(.allow)
+    }
+    
+    public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        print("fail navigation: \(error.localizedDescription)")
+    }
+    
+    public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        print("fail provisional navigation: \(error.localizedDescription)")
+    }
+    
+    public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        print("did commit navigation")
+    }
+    
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        print("did finish navigation")
+    }
+    
 }
 
 private func printLog(_ strings: CustomStringConvertible...) {
