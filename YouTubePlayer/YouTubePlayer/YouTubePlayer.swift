@@ -231,6 +231,12 @@ open class YouTubePlayerView: UIView {
     
     fileprivate func loadWebViewWithParameters(_ parameters: YouTubePlayerParameters) {
         
+        var baseURL = "about:blank"
+        if  let playerVars = parameters["playerVars"] as? YouTubePlayerParameters,
+            let origin = playerVars["origin"] as? String {
+                    baseURL = origin
+        }
+        
         // Get HTML from player file in bundle
         let rawHTMLString = htmlStringWithFilePath(playerHTMLPath())!
         
@@ -241,7 +247,7 @@ open class YouTubePlayerView: UIView {
         let htmlString = rawHTMLString.replacingOccurrences(of: "%@", with: jsonParameters)
         
         // Load HTML in web view
-        webView.loadHTMLString(htmlString, baseURL: URL(string: "about:blank"))
+        webView.loadHTMLString(htmlString, baseURL: URL(string: baseURL))
     }
     
     fileprivate func playerHTMLPath() -> String {
